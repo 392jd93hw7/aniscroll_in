@@ -10,14 +10,6 @@ function fail(status, code, message, details) {
 function assertAccessible(page) {
   if (pageLooksBlocked(page.data)) throw fail(503, 'SOURCE_ACCESS_RESTRICTED', 'The source returned an access or verification page. This API does not bypass access controls.');
 }
-function sourcePath(page, url) {
-  try {
-    const parsed = new URL(url);
-    const base = new URL(page.baseUrl);
-    if (parsed.protocol !== 'https:' || parsed.hostname !== base.hostname) return null;
-    return parsed.pathname + parsed.search;
-  } catch { return null; }
-}
 function linksMatching(html, baseUrl, predicate) {
   const $ = cheerio.load(html);
   const results = [];
@@ -46,18 +38,20 @@ export async function scrapeHome() {
   assertAccessible(page);
   return { source: page.source, url: page.finalUrl, items: extractCards(page.data, page.baseUrl) };
 }
-export async function searchAnime(query, page = 1) {
+export async function searchAnime(query, page = 1, filters = {}) {
   const q = String(query || '').trim();
   if (!q) throw fail(400, 'QUERY_REQUIRED', 'Query parameter q is required.');
   const pageNo = pageParam(page);
-  const path = '/?q=' + encodeURIComponent(q) + (pageNo > 1 ? '&page=' + pageNo : '');
-  const result = await getSourcePage(path);
+  const params = new URLSearchParams({ q });
+  if (pageNo > 1) params.set('page', String(pageNo));
+  for (const key of ['genre', 'year', 'season', 'type']) if (filters[key]) params.set(key, String(filters[key]));
+  const result = await getSourcePage('/?' + params.toString());
   assertAccessible(result);
   const items = extractCards(result.data, result.baseUrl).filter(item => {
     const p = new URL(item.url).pathname;
     return p !== '/' && !/\/(?:search|login|register|genre|tag|category)(?:\/|$)/i.test(p);
   });
-  return { source: result.source, query: q, page: pageNo, url: result.finalUrl, items };
+  return { source: result.source, query: q, page: pageNo, filters, url: result.finalUrl, items };
 }
 export async function suggestAnime(query) {
   const q = String(query || '').trim();
@@ -76,13 +70,12 @@ export async function scrapeListing(kind, { page = 1, year, season, letter } = {
   const paths = {
     genres: '/genre', studios: '/studio', tags: '/tag', categories: '/category',
     az: '/anime/' + encodeURIComponent(String(letter || 'a').slice(0, 1)),
-    seasonal: '/seasonal', series: '/anime'
+    seasonal: '/seasonal', series: '/anime', recent: '/recent', latest: '/latest', popular: '/popular'
   };
   const path = (paths[kind] || '/') + (params.size ? '?' + params.toString() : '');
   const result = await getSourcePage(path);
   assertAccessible(result);
-  const items = extractCards(result.data, result.baseUrl);
-  return { source: result.source, url: result.finalUrl, page: pageNo, items, year: year || null, season: season || null, letter: letter || null };
+  return { source: result.source, url: result.finalUrl, kind, page: pageNo, items: extractCards(result.data, result.baseUrl), year: year || null, season: season || null, letter: letter || null };
 }
 export async function scrapeSeries(id) {
   return scrapeAnimeInfo(id);
@@ -121,7 +114,7 @@ export async function scrapeEpisodes(id) {
 export async function discoverEpisodeSources(id) {
   const safeId = String(id || '').trim();
   if (!safeId || safeId.length > 180 || /[\r\n]/.test(safeId)) throw fail(400, 'INVALID_ID', 'A valid episode id is required.');
-  const paths = safeId.startsWith('http') ? [safeId] : ['/play/' + encodeURIComponent(safeId), '/episode/' + encodeURIComponent(safeId)];
+  const paths = safeId.startsWith('https://') ? [safeId] : ['/play/' + encodeURIComponent(safeId), '/episode/' + encodeURIComponent(safeId)];
   let lastError;
   for (const path of paths) {
     try {
