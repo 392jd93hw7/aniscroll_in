@@ -3,42 +3,67 @@ import { SOURCES, SOURCE_TIMEOUT_MS, HTTP_RETRIES } from '../configs/source.conf
 
 const client = axios.create({
   timeout: SOURCE_TIMEOUT_MS,
-  maxRedirects: 5,
+  maxRedirects: 0,
   responseType: 'text',
   validateStatus: () => true,
-  headers: { 'User-Agent': 'AniScrollAPI/1.0 (source metadata client)', Accept: 'text/html,application/json;q=0.9,*/*;q=0.8' }
+  headers: { 'User-Agent': 'AniScrollAPI/1.1 (source metadata client)', Accept: 'text/html,application/json;q=0.9,*/*;q=0.8' }
 });
 const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+const sourceFor = url => SOURCES.find(source => {
+  const base = new URL(source.baseUrl);
+  return url.protocol === 'https:' && url.hostname === base.hostname;
+});
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function requestOnce(startUrl) {
+  let currentUrl = new URL(startUrl);
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    if (!sourceFor(currentUrl)) {
+      throw Object.assign(new Error('URL or redirect is outside the configured HTTPS source hosts.'), { code: 'REDIRECT_HOST_REJECTED', status: 502 });
+    }
+    const response = await client.get(currentUrl.toString());
+    if (redirectStatuses.has(response.status)) {
+      if (redirects === 5) throw Object.assign(new Error('Upstream redirect limit exceeded.'), { code: 'REDIRECT_LIMIT', status: 502 });
+      const location = response.headers.location;
+      if (!location) throw Object.assign(new Error('Upstream redirect omitted a Location header.'), { code: 'INVALID_REDIRECT', status: 502 });
+      currentUrl = new URL(location, currentUrl);
+      if (!sourceFor(currentUrl)) {
+        throw Object.assign(new Error('Upstream redirected outside configured source hosts.'), { code: 'REDIRECT_HOST_REJECTED', status: 502 });
+      }
+      continue;
+    }
+    if (response.status >= 400) {
+      throw Object.assign(new Error('Upstream returned HTTP ' + response.status), {
+        code: 'UPSTREAM_HTTP_ERROR', status: response.status, retryable: transientStatuses.has(response.status)
+      });
+    }
+    const source = sourceFor(currentUrl);
+    return { data: response.data, status: response.status, finalUrl: currentUrl.toString(), headers: response.headers, source: source.name };
+  }
+  throw Object.assign(new Error('Upstream redirect limit exceeded.'), { code: 'REDIRECT_LIMIT', status: 502 });
+}
 
 export async function requestText(url) {
-  const parsed = new URL(url);
-  const source = SOURCES.find(s => parsed.hostname === new URL(s.baseUrl).hostname);
-  if (parsed.protocol !== 'https:' || !source) {
-    throw Object.assign(new Error('URL is not from a configured source.'), { code: 'SOURCE_URL_REJECTED', status: 400 });
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    throw Object.assign(new Error('Invalid source URL.'), { code: 'SOURCE_URL_REJECTED', status: 400 });
+  }
+  if (!sourceFor(parsed)) {
+    throw Object.assign(new Error('URL is not from a configured HTTPS source.'), { code: 'SOURCE_URL_REJECTED', status: 400 });
   }
   let lastError;
   for (let attempt = 0; attempt <= HTTP_RETRIES; attempt++) {
     try {
-      const response = await client.get(url);
-      if (response.status >= 400) {
-        const error = Object.assign(new Error(`Upstream returned HTTP ${response.status}`), { code: 'UPSTREAM_HTTP_ERROR', status: response.status });
-        if (!transientStatuses.has(response.status)) throw error;
-        lastError = error;
-      } else {
-        const finalUrl = response.request?.res?.responseUrl || url;
-        const finalParsed = new URL(finalUrl);
-        if (!SOURCES.some(s => finalParsed.hostname === new URL(s.baseUrl).hostname)) {
-          throw Object.assign(new Error('Upstream redirected outside configured source hosts.'), { code: 'REDIRECT_HOST_REJECTED', status: 502 });
-        }
-        return { data: response.data, status: response.status, finalUrl, headers: response.headers, source: source.name };
-      }
+      return await requestOnce(parsed.toString());
     } catch (error) {
       lastError = error;
-      if (['SOURCE_URL_REJECTED', 'REDIRECT_HOST_REJECTED'].includes(error.code) || (error.response?.status && !transientStatuses.has(error.response.status))) throw error;
+      if (['SOURCE_URL_REJECTED', 'REDIRECT_HOST_REJECTED', 'REDIRECT_LIMIT', 'INVALID_REDIRECT'].includes(error.code)) throw error;
+      if (attempt >= HTTP_RETRIES || !(error.retryable || transientStatuses.has(error.response?.status) || error.code === 'ECONNABORTED' || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT')) throw error;
+      await delay(150 * (2 ** attempt));
     }
-    if (attempt < HTTP_RETRIES) await new Promise(resolve => setTimeout(resolve, 150 * (2 ** attempt)));
   }
-  throw lastError || new Error('Upstream request failed');
+  throw lastError || new Error('Upstream request failed.');
 }
 
 export async function getSourcePage(path = '/') {
@@ -47,8 +72,8 @@ export async function getSourcePage(path = '/') {
     try {
       const url = new URL(path, source.baseUrl).toString();
       const result = await requestText(url);
-      if (typeof result.data !== 'string' || result.data.trim().length === 0) throw new Error('Upstream returned an empty page');
-      return { ...result, source: source.name, baseUrl: source.baseUrl };
+      if (typeof result.data !== 'string' || result.data.trim().length === 0) throw new Error('Upstream returned an empty page.');
+      return { ...result, source: result.source || source.name, baseUrl: source.baseUrl };
     } catch (error) {
       errors.push({ source: source.name, code: error.code || 'UPSTREAM_ERROR', message: error.message });
     }
