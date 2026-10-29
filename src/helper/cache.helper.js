@@ -1,4 +1,5 @@
 const defaultTtl = Math.max(0, Number(process.env.CACHE_DEFAULT_TTL_SECONDS || 300)) * 1000;
+const MAX_CACHE_ENTRIES = Math.max(50, Number(process.env.CACHE_MAX_ENTRIES || 500));
 const cache = new Map();
 
 export function cacheGet(key) {
@@ -8,12 +9,16 @@ export function cacheGet(key) {
     cache.delete(key);
     return undefined;
   }
+  cache.delete(key);
+  cache.set(key, item);
   return item.value;
 }
 
 export function cacheSet(key, value, ttlMs = defaultTtl) {
   if (ttlMs <= 0) return value;
+  cache.delete(key);
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value);
   return value;
 }
 
