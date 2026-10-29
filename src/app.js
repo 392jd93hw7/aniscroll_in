@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
-import { randomUUID } from 'node:crypto';
 import apiRoutes from './routes/apiRoutes.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './helper/error.helper.js';
@@ -23,7 +23,7 @@ app.use(cors({
 
 app.use(rateLimit({
   windowMs: Math.max(1000, Number(process.env.RATE_LIMIT_WINDOW_MS || 60000)),
-  limit: Math.max(1, Number(process.env.RATE_LIMIT_MAX || 100)),
+  max: Math.max(1, Number(process.env.RATE_LIMIT_MAX || 100)),
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests; try again later.' } }
