@@ -12,7 +12,8 @@ const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export async function requestText(url) {
   const parsed = new URL(url);
-  if (parsed.protocol !== 'https:' || !SOURCES.some(s => parsed.hostname === new URL(s.baseUrl).hostname)) {
+  const source = SOURCES.find(s => parsed.hostname === new URL(s.baseUrl).hostname);
+  if (parsed.protocol !== 'https:' || !source) {
     throw Object.assign(new Error('URL is not from a configured source.'), { code: 'SOURCE_URL_REJECTED', status: 400 });
   }
   let lastError;
@@ -24,11 +25,16 @@ export async function requestText(url) {
         if (!transientStatuses.has(response.status)) throw error;
         lastError = error;
       } else {
-        return { data: response.data, status: response.status, finalUrl: response.request?.res?.responseUrl || url, headers: response.headers };
+        const finalUrl = response.request?.res?.responseUrl || url;
+        const finalParsed = new URL(finalUrl);
+        if (!SOURCES.some(s => finalParsed.hostname === new URL(s.baseUrl).hostname)) {
+          throw Object.assign(new Error('Upstream redirected outside configured source hosts.'), { code: 'REDIRECT_HOST_REJECTED', status: 502 });
+        }
+        return { data: response.data, status: response.status, finalUrl, headers: response.headers, source: source.name };
       }
     } catch (error) {
       lastError = error;
-      if (error.code === 'SOURCE_URL_REJECTED' || (error.response?.status && !transientStatuses.has(error.response.status))) throw error;
+      if (['SOURCE_URL_REJECTED', 'REDIRECT_HOST_REJECTED'].includes(error.code) || (error.response?.status && !transientStatuses.has(error.response.status))) throw error;
     }
     if (attempt < HTTP_RETRIES) await new Promise(resolve => setTimeout(resolve, 150 * (2 ** attempt)));
   }
@@ -58,8 +64,8 @@ export async function sourceStatus() {
   return Promise.all(SOURCES.map(async source => {
     const started = Date.now();
     try {
-      const response = await requestText(source.baseUrl);
-      return { name: source.name, baseUrl: source.baseUrl, available: response.status >= 200 && response.status < 400, status: response.status, durationMs: Date.now() - started };
+      const result = await requestText(source.baseUrl);
+      return { name: source.name, baseUrl: source.baseUrl, available: result.status >= 200 && result.status < 400, status: result.status, durationMs: Date.now() - started };
     } catch (error) {
       return { name: source.name, baseUrl: source.baseUrl, available: false, error: error.code || 'SOURCE_UNAVAILABLE', durationMs: Date.now() - started };
     }
