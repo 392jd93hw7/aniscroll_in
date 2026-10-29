@@ -2,8 +2,6 @@ import * as cheerio from 'cheerio';
 
 export function extractCards(html, baseUrl) {
   const $ = cheerio.load(html);
-  const selectors = ['. anime-card', '.episode-item', '.search-result', '.col-12 .col-'];
-  // Conservative generic extraction: use links and text without assuming undocumented site selectors.
   const output = [];
   const seen = new Set();
   $('a[href]').each((_, element) => {
@@ -12,7 +10,8 @@ export function extractCards(html, baseUrl) {
     if (!href || !title || href.startsWith('#') || href.startsWith('javascript:')) return;
     let url;
     try { url = new URL(href, baseUrl).toString(); } catch { return; }
-    if (!['http:', 'https:'].includes(new URL(url).protocol) || seen.has(url)) return;
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol) || seen.has(url)) return;
     seen.add(url);
     const image = $(element).find('img').first();
     output.push({ title, url, image: image.attr('data-src') || image.attr('src') || null });
