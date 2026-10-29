@@ -20,7 +20,6 @@ const cached = (key, ttl, work) => asyncRoute(async (req, res) => {
 const pageNumber = req => Math.max(1, Math.min(1000, Number.parseInt(req.query.page || '1', 10) || 1));
 const q = req => String(req.query.q || '').trim();
 const listing = kind => cached(req => 'listing:' + kind + ':' + JSON.stringify(req.query), cacheTtlSeconds('default'), async req => ({ success: true, ...(await scrapeListing(kind, { page: pageNumber(req), year: req.query.year, season: req.query.season, letter: req.params.letter })) }));
-const homepageAlias = label => cached(label, cacheTtlSeconds('metadata'), async () => ({ success: true, view: label, ...(await scrapeHome()) }));
 
 router.get('/', (req, res) => res.json({ name: 'AniScroll AnimePahe API', status: 'running', docs: '/_routes', health: '/health' }));
 router.get('/health', (req, res) => res.json({ success: true, service: 'aniscroll-animepahe-api', status: 'ok', sources: SOURCES.length }));
@@ -28,14 +27,15 @@ router.get('/ping', (req, res) => res.json({ success: true, pong: true, timestam
 router.get('/version', (req, res) => res.json({ success: true, name: 'aniscroll-animepahe-api', version: '1.1.0' }));
 router.get('/sources/status', asyncRoute(async (req, res) => res.json({ success: true, sources: await sourceStatus() })));
 router.get('/home', cached('home', cacheTtlSeconds('metadata'), async () => ({ success: true, ...(await scrapeHome()) })));
-router.get('/recent', homepageAlias('recent'));
-router.get('/latest', homepageAlias('latest'));
-router.get('/popular', homepageAlias('popular'));
+router.get('/recent', listing('recent'));
+router.get('/latest', listing('latest'));
+router.get('/popular', listing('popular'));
 router.get('/search', cached(req => 'search:' + q(req).toLowerCase() + ':' + pageNumber(req), cacheTtlSeconds('search'), async req => ({ success: true, ...(await searchAnime(q(req), pageNumber(req))) })));
 router.get('/search/advanced', cached(req => 'advanced:' + JSON.stringify(req.query), cacheTtlSeconds('search'), async req => {
   const query = q(req);
   if (!query) throw new ApiError(400, 'QUERY_REQUIRED', 'Query parameter q is required.');
-  return { success: true, ...(await searchAnime(query, pageNumber(req))), filters: { genre: req.query.genre || null, year: req.query.year || null, season: req.query.season || null, type: req.query.type || null } };
+  const filters = { genre: req.query.genre || null, year: req.query.year || null, season: req.query.season || null, type: req.query.type || null };
+  return { success: true, ...(await searchAnime(query, pageNumber(req), filters)) };
 }));
 router.get('/search/suggest', cached(req => 'suggest:' + q(req).toLowerCase(), cacheTtlSeconds('search'), async req => ({ success: true, ...(await suggestAnime(q(req))) })));
 router.get('/genres', listing('genres'));
@@ -46,7 +46,7 @@ router.get('/az/:letter', listing('az'));
 router.get('/seasonal', listing('seasonal'));
 router.get('/browse', cached(req => 'browse:' + JSON.stringify(req.query), cacheTtlSeconds('default'), async req => {
   const kind = String(req.query.kind || 'series');
-  if (!['genres', 'studios', 'tags', 'categories', 'az', 'seasonal', 'series'].includes(kind)) throw new ApiError(400, 'INVALID_BROWSE_KIND', 'Unsupported browse kind.');
+  if (!['genres', 'studios', 'tags', 'categories', 'az', 'seasonal', 'series', 'recent', 'latest', 'popular'].includes(kind)) throw new ApiError(400, 'INVALID_BROWSE_KIND', 'Unsupported browse kind.');
   return { success: true, ...(await scrapeListing(kind, { page: pageNumber(req), year: req.query.year, season: req.query.season, letter: req.query.letter })) };
 }));
 router.get('/series', listing('series'));
