@@ -1,52 +1,46 @@
 # AniScroll AnimePahe API
 
-Node.js REST API scaffold for anime metadata, search, episode catalogs, source health, and playback-source discovery.
+Node.js REST API for generic anime listing/search, metadata, episode catalogs, source health, and playback URL discovery.
 
-> Streaming discovery is limited to URLs exposed through accessible pages or permitted interfaces. This project does not bypass DDoS protections, defeat CAPTCHAs, or evade access controls.
+> This adapter only parses pages and media URLs available through normal, permitted access. It does not bypass DDoS protection, solve CAPTCHAs, evade access controls, or defeat DRM. Source HTML changes may require parser updates.
 
 ## Requirements
-
-- Node.js 24 LTS recommended (Node.js >=20 supported)
+- Node.js 20+ (Node 24 recommended)
 - npm
 
 ## Run locally
-
 ```sh
 cp .env.example .env
 npm install
 npm run dev
 ```
-
-The service defaults to `http://localhost:3000`. Open `/` for the API overview, `/health` for health status, and `/sources/status` for configured source reachability.
+Defaults to `http://localhost:3000`. See `/_routes`, `/health`, and `/sources/status`.
 
 ## Configuration
+See `.env.example`. Primary and fallback URLs default to `https://animepahe.ch` and `https://animepahe.ng`. The adapter restricts source requests to these hosts. Set `CORS_ORIGINS` to `*` for open development access or a comma-separated origin allowlist in production.
 
-See `.env.example`. The source order defaults to `https://animepahe.ch` then `https://animepahe.ng`. Only these allowlisted hosts are accepted by the source adapter. Set `CORS_ORIGINS=*` for permissive CORS, or provide a comma-separated allowlist for production.
+## API routes (22+)
+- `GET /health`, `GET /sources/status`, `GET /_routes`
+- `GET /home`
+- `GET /search?q=naruto&page=1`, `GET /search/suggest?q=nar`
+- `GET /genres`, `GET /studios`, `GET /tags`, `GET /categories`
+- `GET /az/:letter`, `GET /seasonal?year=2026&season=fall`
+- `GET /series?page=1`, `GET /series/:id`
+- `GET /anime/:id`, `GET /anime/:id/episodes`
+- `GET /episode/:id/sources`, `GET /stream/resolve?id=...`, `GET /embed/resolve?url=...`
 
-## API surface
+Search and listing use conservative generic HTML parsing and common route patterns. Since the upstream page contract is not guaranteed, validate results against the live source before production use. Source changes can return errors rather than fabricated data.
 
-- `GET /health`
-- `GET /sources/status`
-- `GET /search?q=naruto&page=1`
-- `GET /search/suggest?q=nar`
-- `GET /genres`, `/studios`, `/tags`, `/categories`
-- `GET /az/:letter`, `/seasonal?year=2026&season=fall`
-- `GET /series?page=1`, `/series/:id`
-- `GET /anime/:id`, `/anime/:id/episodes`
-- `GET /episode/:id/sources`
-- `GET /stream/resolve?id=:id`
+## Playback
+The resolver detects visible HLS `.m3u8`, MP4, DASH `.mpd`, and iframe/embed URLs in accessible HTML. It does not execute untrusted page scripts, recursively crawl arbitrary hosts, or defeat token challenges. URLs signed by a provider may expire.
 
-Because the upstream site's live HTML/API contract has not been verified, scraper results may report `UPSTREAM_UNSUPPORTED` instead of fabricating metadata. The source adapter is isolated so verified selectors or a documented API can be added safely.
-
-## Deployment
-
+## Deploy
 - Docker: `docker build -t aniscroll-api . && docker run --env-file .env -p 3000:3000 aniscroll-api`
-- Render: use `render.yaml`
-- Railway: deploy from this repository and use `npm start`
-- Vercel: `vercel.json` maps API routes to the Express function; browser automation is intentionally not bundled into serverless requests.
+- Render: `render.yaml`
+- Railway: set the start command to `npm start`
+- Vercel: `vercel.json` (browser automation is not used inside serverless requests)
 
 ## Tests
-
 ```sh
 npm test
 ```
