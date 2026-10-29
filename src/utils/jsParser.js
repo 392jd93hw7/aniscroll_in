@@ -1,4 +1,4 @@
-// Extract readable string assignments without evaluating page scripts.
+// Extract readable string assignments without evaluating untrusted page scripts.
 export function extractStringAssignments(script, variableNames = []) {
   const wanted = new Set(variableNames);
   const results = {};
@@ -9,6 +9,12 @@ export function extractStringAssignments(script, variableNames = []) {
   return results;
 }
 export function findHlsUrls(text) {
-  const matches = String(text).match(/https?:\\?\/\\?\/[^"'\s<>]+?\.m3u8(?:\?[^"'\s<>]*)?/gi) || [];
-  return [...new Set(matches.map(value => value.replace(/\\\//g, '/')))];
+  const input = String(text).replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
+  const matches = input.match(/https?:\/\/[^"'\s<>\\]+?\.m3u8(?:\?[^"'\s<>\\]*)?/gi) || [];
+  return [...new Set(matches.map(value => value.replace(/[),;]+$/, '')))];
+}
+export function findMediaUrls(text) {
+  const input = String(text).replace(/\\\//g, '/').replace(/&amp;/g, '&');
+  const matches = input.match(/https?:\/\/[^"'\s<>\\]+?\.(?:mp4|m3u8|mpd)(?:\?[^"'\s<>\\]*)?/gi) || [];
+  return [...new Set(matches.map(value => value.replace(/[),;]+$/, '')))];
 }
