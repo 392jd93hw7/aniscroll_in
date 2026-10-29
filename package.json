@@ -5,7 +5,7 @@
   "description": "Anime metadata and playback-source discovery REST API",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "start": "node server.js",
