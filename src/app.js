@@ -31,11 +31,11 @@ app.use(rateLimit({
 
 app.get('/', (req, res) => res.json({
   name: 'AniScroll AnimePahe API',
-  version: '1.0.0',
+  version: '1.1.0',
   status: 'running',
   docs: '/_routes',
   health: '/health',
-  note: 'Source-specific data extraction is enabled only where the upstream interface has been verified.'
+  note: 'Generic page parsing is best-effort; source-specific selectors require live verification.'
 }));
 app.use('/', apiRoutes);
 app.use((req, res) => res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint not found.' }, requestId: req.id }));
