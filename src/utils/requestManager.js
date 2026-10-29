@@ -5,10 +5,9 @@ const client = axios.create({
   timeout: SOURCE_TIMEOUT_MS,
   maxRedirects: 5,
   responseType: 'text',
-  validateStatus: status => status >= 200 && status < 400,
-  headers: { 'User-Agent': 'AniScrollAPI/1.0 (+source metadata client)', Accept: 'text/html,application/json;q=0.9,*/*;q=0.8' }
+  validateStatus: () => true,
+  headers: { 'User-Agent': 'AniScrollAPI/1.0 (source metadata client)', Accept: 'text/html,application/json;q=0.9,*/*;q=0.8' }
 });
-
 const transientStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export async function requestText(url) {
