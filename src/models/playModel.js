@@ -8,5 +8,5 @@ export function normalizePlaybackSources({ html = '', pageUrl, source }) {
       if (['https:', 'http:'].includes(url.protocol) && !embeds.includes(url.toString())) embeds.push(url.toString());
     } catch { /* ignore malformed URLs */ }
   }
-  return { source: source || null, pageUrl: pageUrl || null, streams: hls.map(url => ({ type: 'hls', format: 'm3u8', url })), embeds, note: 'Only publicly exposed source URLs are reported; signed URLs may expire and access controls are not bypassed.' };
+  return { source: source || null, pageUrl: pageUrl || null, streams: hls.map(url => ({ type: 'hls', format: 'm3u8', url })), embeds, note: 'Only URLs exposed in accessible page source are returned; signed URLs may expire.' };
 }
