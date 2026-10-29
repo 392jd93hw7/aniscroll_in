@@ -5,7 +5,7 @@ Node.js REST API for generic anime listing/search, metadata, episode catalogs, s
 > This adapter only parses pages and media URLs available through normal, permitted access. It does not bypass DDoS protection, solve CAPTCHAs, evade access controls, or defeat DRM. Source HTML changes may require parser updates.
 
 ## Requirements
-- Node.js 20+ (Node 24 recommended)
+- Node.js 20.18.1+ (Node 24 recommended)
 - npm
 
 ## Run locally
