@@ -1,16 +1,14 @@
 import { SOURCES } from '../configs/source.config.js';
-import { getSourcePage } from '../utils/requestManager.js';
-import { pageLooksBlocked } from '../extractors/html.extractor.js';
+import { requestText } from '../utils/requestManager.js';
 
 export async function getSourceHealth() {
-  const health = [];
-  for (const source of SOURCES) {
+  return Promise.all(SOURCES.map(async source => {
+    const started = Date.now();
     try {
-      const result = await getSourcePage('/');
-      health.push({ name: source.name, baseUrl: source.baseUrl, available: true, sampledSource: result.source });
+      const result = await requestText(source.baseUrl);
+      return { name: source.name, baseUrl: source.baseUrl, available: result.status >= 200 && result.status < 400, status: result.status, durationMs: Date.now() - started };
     } catch (error) {
-      health.push({ name: source.name, baseUrl: source.baseUrl, available: false, error: error.code || 'UPSTREAM_ERROR' });
+      return { name: source.name, baseUrl: source.baseUrl, available: false, error: error.code || 'UPSTREAM_ERROR', durationMs: Date.now() - started };
     }
-  }
-  return health;
+  }));
 }
