@@ -9,7 +9,21 @@ import { errorHandler } from './helper/error.helper.js';
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : false);
+
+// Codespaces and common hosted deployments sit behind one reverse proxy.
+// Set TRUST_PROXY=0 for a directly exposed server, or to the exact trusted
+// proxy-hop count for your deployment. Avoid trusting arbitrary X-Forwarded-* headers.
+const trustProxySetting = process.env.TRUST_PROXY;
+if (trustProxySetting === 'false' || trustProxySetting === '0') {
+  app.set('trust proxy', false);
+} else if (trustProxySetting === 'true' || trustProxySetting === undefined || trustProxySetting === '') {
+  app.set('trust proxy', 1);
+} else {
+  const hops = Number.parseInt(trustProxySetting, 10);
+  if (!Number.isInteger(hops) || hops < 0) throw new Error('TRUST_PROXY must be false, true, or a non-negative proxy-hop count.');
+  app.set('trust proxy', hops);
+}
+
 app.use(requestLogger);
 app.use(compression());
 app.use(express.json({ limit: '100kb' }));
