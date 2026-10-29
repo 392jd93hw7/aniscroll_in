@@ -12,24 +12,24 @@ export async function scrapeHome() {
   return { source: page.source, url: page.finalUrl, items: extractCards(page.data, page.baseUrl) };
 }
 
-export async function searchAnime(query) {
+export async function searchAnime(query, page = 1) {
   if (!query || !query.trim()) {
     const error = new Error('Query parameter q is required.');
     error.status = 400;
     error.code = 'QUERY_REQUIRED';
     throw error;
   }
-  // Query URL conventions are deliberately not guessed; inspect current source markup/docs first.
   const error = new Error('Search extraction requires verification of the upstream search route and selectors.');
   error.status = 501;
   error.code = 'UPSTREAM_UNSUPPORTED';
-  error.details = { query: query.trim(), nextStep: 'Verify the live search interface before configuring source-specific selectors.' };
+  error.details = { query: query.trim(), page, nextStep: 'Verify the live search interface before configuring source-specific selectors.' };
   throw error;
 }
 
-export async function discoverEpisodeSources() {
+export async function discoverEpisodeSources(id) {
   const error = new Error('Episode/stream discovery requires a verified episode-page contract and permitted player URLs.');
   error.status = 501;
   error.code = 'UPSTREAM_UNSUPPORTED';
+  error.details = { id };
   throw error;
 }
